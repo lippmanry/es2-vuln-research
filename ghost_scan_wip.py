@@ -3,6 +3,7 @@ import json
 import glob
 import os
 import re
+from datetime import datetime
 
 #base dir
 output = "./output"
@@ -12,7 +13,8 @@ files = glob.glob(os.path.join(output, f'*.json'), recursive=False)
 
 names = {}
 datas = {}
-prowler_details = {}
+prowler_details = []
+trivy_details = []
 for f in files:
     #dynamically assign names
     name = re.match(r'^.+\\(\w+)', f).group(1)
@@ -42,7 +44,7 @@ for f in files:
                     remediation = datas['prowler'][0].get('remediation',{}).get('desc')
                     
                     #add to dictionary
-                    prowler_details.update({'title': title,
+                    prowler_details.append({'title': title,
                                             'time': time,
                                             'iso_time': iso_time,
                                             'instance_id': instance_id,
@@ -54,6 +56,46 @@ for f in files:
                                             'details': message,
                                             'remediation': remediation})
                     
+        results = datas['trivy_report'].get('Results', [])
+        tr_dt = datetime.fromisoformat(datas['trivy_report'].get('CreatedAt'))
+        artifact = datas['trivy_report'].get('ArtifactName')
+        #match prowler timestamps
+        iso_report_time = int(tr_dt.timestamp())
+        report_time = tr_dt.replace(tzinfo=None).isoformat()
+        
+
+        for result in results:
+            #get the target location and class
+            target_location = result.get('Target', 'Uknown')
+            target_class = result.get('Class', 'Unknown')
+            
+            #get vulnerabilities
+            vulnerabilities = result.get('Vulnerabilities', [])
+            
+            for vuln in vulnerabilities:
+                #get the important stuff
+                
+                package = vuln.get('PkgID', 'Uknown')
+                vuln_id = vuln.get('VulnerabilityID', 'Unknown')
+                severity = vuln.get('Severity', 'Uknown')
+                cwes = vuln.get('CweIDs', 'Unknown')
+                title = vuln.get('Title', 'Unknown')
+                details = vuln.get('Description', 'Unknown')
+
+                trivy_details.append({
+                                    'title':title,
+                                    'time':report_time,
+                                    'iso_time': iso_report_time,
+                                    'artifact': artifact,
+                                    'target_location': target_location,
+                                    'target_class': target_class,
+                                    'package': package,
+                                    'vuln_id': vuln_id,
+                                    'severity': severity,
+                                    'cwes': cwes,
+                                    'details': details
+                                    })
+    
             
     except json.JSONDecodeError as e:
         raise ValueError(f'Invalid JSON format: {e}')
